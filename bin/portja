@@ -1,0 +1,223 @@
+#!/usr/bin/env modernish
+#!use safe
+#!use sys/base
+#!use sys/base/mktemp
+#!use sys/base/readlink
+#!use sys/cmd/harden
+#!use var/loop
+#!use var/loop/find
+
+harden git
+harden make
+
+showusage () {
+    putln "usage: ${ME} PORTSDIR MAKECONF REPOSITORY [REPOSITORY ...]"
+}
+
+blake256 () {
+    openssl blake2s256 -r "$@" | cut -d" " -f1
+}
+
+clone_repository () {
+    local _urlhash _target _makefile _portinfo _clonedir
+    local _url _branch _branchopt _commit _origin _portname _filename
+    _urlhash=$(put $1 | blake256)
+    _target=${_tempdir}/${_urlhash}
+    _portinfo=${_target}.info
+
+    if is dir ${_target}; then
+        return
+    fi
+
+    if ! is dir $1; then
+        XDG_RUNTIME_DIR= TMPDIR=${_tempdir} mktemp -dst
+        _clonedir=${REPLY}
+        _branch=${1##*#}
+        _url=${1%#*}
+
+        if str eq ${_url} ${_branch}; then
+            _branchopt=
+            _branch=
+        else
+            _branchopt=-b
+        fi
+
+        git clone --single-branch ${_branchopt} ${_branch} \
+            ${_url} ${_clonedir} 2>/dev/null
+    else
+        _clonedir=$1
+    fi
+
+    unset -f clonegit
+    harden -f clonegit git -C ${_clonedir}
+
+    _branch=$(clonegit branch --show-current)
+    _commit=${_tempdir}/$(
+        clonegit rev-list -n1 --first-parent --until=${_stamp} ${_branch}
+    )
+
+    if is sym ${_commit}; then
+        if ! is dir $1; then
+            rm -rf ${_clonedir}
+        fi
+        return
+    fi
+
+    (
+        cd ${_clonedir}
+        clonegit ls-files -zoc --exclude-standard | \
+            cpio -pmd0 ${_target} 2>/dev/null
+    )
+
+    ln -s ${_urlhash} ${_commit}
+
+    mkdir ${_portinfo}
+    put $1 > ${_portinfo}/target
+    clonegit rev-list --count ${_branch} > ${_portinfo}/revision
+    clonegit log --pretty=%aE%n%cE | sort | uniq -c | sort -n | \
+        awk '{ print $2 }' > ${_portinfo}/maintainer
+
+    if ! is dir $1; then
+        rm -rf ${_clonedir}
+    fi
+
+    LOOP find _makefile in ${_target} -type f -name *.portja; DO
+        _origin=$(get_make_var PJ.ORIGIN)
+        _portname=${_origin#*/}
+        _filename=${_makefile##*/}
+        if str ne ${_portname}.portja ${_filename}; then
+           die "Portname ${_portname} doesn't match filename ${_filename}."
+        fi
+        _makefiles="${_makefiles} ${_origin}:${_makefile}"
+        _targetdirs="${_targetdirs} ${_origin}:${_target}"
+    DONE
+}
+
+get_make_var () {
+    make -I ${_share} -f ${_makefile} \
+         __MAKE_CONF=${_makeconf} \
+         PORTINFO=${_portinfo} PORTSDIR=${_portsdir} \
+         -V \${$1}
+}
+
+find_by_origin () {
+    local _item
+    LOOP for --split _item in $1; DO
+        if str begin ${_item} $2: ; then
+            put ${_item#*:}
+            return
+        fi
+    DONE
+    return 1
+}
+
+generate_port () {
+    if find_by_origin "${_generated}" $1; then
+        return
+    fi
+
+    local _makefile _target _portinfo _outdir _repotar
+    local url dep origin
+
+    _makefile=$(find_by_origin "${_makefiles}" $1)
+    _target=$(find_by_origin "${_targetdirs}" $1)
+    _portinfo=${_target}.info
+    _outdir=${_portsdir}/$1
+    _generated="${_generated} $1:"
+
+    if str empty ${_makefile} || str empty ${_target}; then
+        die "Couldn't find portja file to generate $1"
+    fi
+
+    # ---- clone referenced repositories ----
+    LOOP for --split url in $(get_make_var PJ.DEPENDS_URLS); DO
+        clone_repository ${url}
+    DONE
+
+    # ---- resolve and generate dependecies ----
+    LOOP for --split dep in $(get_make_var _UNIFIED_DEPENDS); DO
+        origin=${dep#*:}
+        origin=${origin%%:*}
+        origin=${origin%@*}
+        if is dir ${_portsdir}/${origin}; then
+            continue
+        fi
+        generate_port ${origin}
+    DONE
+
+    # ---- cleanup and create directory ----
+    rm -rf ${_outdir}
+    mkdir -p ${_outdir}
+
+    # ---- copy Makefile, portja.mk, port/repo info ----
+    cp    ${_makefile}        ${_outdir}/Makefile
+    cp    ${_share}/portja.mk ${_outdir}
+    cp -r ${_share}/mk        ${_outdir}
+    cp -r ${_portinfo}        ${_outdir}/info
+
+    # ---- files ----
+    if is dir ${_makefile%.portja}.files; then
+        cp -r ${_makefile%.portja}.files ${_outdir}/files
+    else
+        mkdir ${_outdir}/files
+    fi
+
+    # ---- rc file ----
+    if is reg ${_makefile%.portja}.rc; then
+        cp ${_makefile%.portja}.rc ${_outdir}/files/$(get_make_var PORTNAME).in
+    fi
+
+    # ---- pkg-descr ----
+    get_make_var PJ.DESCR     > ${_outdir}/pkg-descr
+    if ! str empty $(get_make_var PJ.WWW); then
+        putln                >> ${_outdir}/pkg-descr
+        put "WWW: "          >> ${_outdir}/pkg-descr
+        get_make_var PJ.WWW  >> ${_outdir}/pkg-descr
+    fi
+
+    # ---- repository package ----
+    if ! str empty $(get_make_var PJ.DISTFILES:Mrepository); then
+        _repotar=${_outdir}/repo.tar.xz
+        tar -C ${_target} -s @^./@$(get_make_var PKGNAME)/@ -c -J \
+            -f ${_repotar} .
+        blake256 ${_repotar} > ${_repotar}.blake2s256
+    fi
+}
+
+main () {
+    if let "$# < 3"; then
+        exit -u 1
+    fi
+
+    if ! is dir $1; then
+        putln "error: $1 is not a directory"
+        exit 1
+    fi
+
+    mktemp -dsCCC
+    _tempdir=${REPLY}
+    _stamp=$(date -Iseconds)
+    _share=$(dirname $(dirname $(readlink -e ${ME})))/share/portja
+    _makefiles=
+    _targetdirs=
+    _generated=
+    _portsdir=$1
+    _makeconf=$2
+    _generated=
+
+    shift 2
+
+    LOOP for --split url in "$@"; DO
+       clone_repository ${url}
+    DONE
+
+    LOOP for --split item in ${_makefiles}; DO
+        generate_port ${item%%:*}
+    DONE
+
+    LOOP for --split _item in "${_generated}"; DO
+        putln ${_item%:} >> ${_portsdir}/portja.generated
+    DONE
+}
+
+main "$@"
