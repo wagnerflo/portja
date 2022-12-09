@@ -10,8 +10,8 @@ case ${type} in
         keywords=${2:-,,}
         ;;
     symlink)
-        dest=$1
         src=$1
+        dest=$2
         ;;
     *)
         src=$1
