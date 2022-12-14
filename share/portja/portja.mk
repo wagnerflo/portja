@@ -52,13 +52,13 @@ PJ.REPO_MAINTAINER!=	cat ${PORTINFO}/maintainer
 
 
 # ----------------------------------------------------------------------
-# PJ.REPOSITORY_REVISION
+# PJ.VERSION, PORTVERSION, PJ.REVISION, PORTREVISION
 #
-.if defined(PJ.VERSION)
+.if !empty(PJ.VERSION)
 PORTVERSION=	${PJ.VERSION}
-PORTREVISION=	${PJ.REVISION:U0}
 .endif
 
+PORTREVISION?=	${PJ.REVISION:U0}
 
 # ----------------------------------------------------------------------
 # PJ.DISTFILES, DISTFILES
