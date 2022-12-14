@@ -5,16 +5,10 @@ cwd=$(dirname "$(realpath "$0")")
 . "${cwd}/functions.sh"
 
 blake2s256 () {
-    if [ "$2" != $(openssl blake2s256 -r "${1}" | head -c64) ]; then
+    if [ "$2" != "$(openssl blake2s256 -r "${1}" | head -c64)" ]; then
         msg "===> Failed to verify checksum of $(basename "$1")"
         exit 1
     fi
-}
-
-blake2() {
-}
-
-md5() {
 }
 
 gpg_home() {
@@ -45,7 +39,8 @@ fetch_http() {
 
 check_blake() {
     if hash=$(get_keyword "blake"); then
-        if [ "${hash}" != $(b2sum -a blake2b -l 256 "$1" | head -c64) ]; then
+        msg "===> Checking Blake2b256 against ${hash}."
+        if [ "${hash}" != "$(b2sum -a blake2b -l 256 "$1" | head -c64)" ]; then
             msg "===> Failed to verify checksum of $(basename "$1")"
             exit 1
         fi
@@ -54,7 +49,8 @@ check_blake() {
 
 check_md5() {
     if hash=$(get_keyword "md5"); then
-        if [ "${hash}" != $(md5 -q "$1") ]; then
+        msg "===> Checking MD5 against ${hash}."
+        if [ "${hash}" != "$(md5 -q "$1")" ]; then
 	    msg "===> Failed to verify checksum of $(basename "$1")"
 	    exit 1
         fi
