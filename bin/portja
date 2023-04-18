@@ -178,7 +178,7 @@ generate_port () {
     # ---- repository package ----
     if ! str empty $(get_make_var PJ.DISTFILES:Mrepository); then
         _repotar=${_outdir}/repo.tar.xz
-        tar -C ${_target} -s @^./@$(get_make_var PKGNAME)/@ -c -J \
+        tar -C ${_target} -s @^./@$(get_make_var DISTNAME)/@ -c -J \
             -f ${_repotar} .
         blake256 ${_repotar} > ${_repotar}.blake2s256
     fi
