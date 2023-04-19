@@ -50,7 +50,7 @@ case ${type} in
         case ${flags} in
             *S*)
                 ( cd ${dp_WRKSRC}; \
-                  ${dp_SED} ${dp_SUB_LIST_TEMP} ${src} > ${dp_WRKDIR}/pj.tmp )
+                  eval ${dp_SED} ${dp_SUB_LIST_TEMP} ${src} > ${dp_WRKDIR}/pj.tmp )
                 ;;
             *)
                 ( cd ${dp_WRKSRC}; \

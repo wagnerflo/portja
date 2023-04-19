@@ -231,7 +231,7 @@ pj-install-files:
 	     dp_MAN9PREFIX="${MAN9PREFIX}" \
 	     dp_MKDIR="${MKDIR}" \
 	     dp_SED="${SED}" \
-	     dp_SUB_LIST_TEMP="${_SUB_LIST_TEMP}" \
+	     dp_SUB_LIST_TEMP='${_SUB_LIST_TEMP}' \
 	     dp_INSTALL_script="${INSTALL_SCRIPT}" \
 	     dp_INSTALL_data="${INSTALL_DATA}" \
 	     dp_INSTALL_program="${INSTALL_PROGRAM}" \
