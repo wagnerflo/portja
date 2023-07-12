@@ -135,6 +135,7 @@ generate_port () {
     DONE
 
     # ---- resolve and generate dependecies ----
+    putln "Resolving dependencies for $1"
     LOOP for --split dep in $(get_make_var _UNIFIED_DEPENDS); DO
         origin=${dep#*:}
         origin=${origin%%:*}

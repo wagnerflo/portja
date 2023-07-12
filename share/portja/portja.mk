@@ -215,6 +215,7 @@ _USES_install+=	690:pj-install-files
 .endfor
 
 pj-install-files:
+	@${ECHO_MSG} "===>   portja: Installing files"
 	@${SETENV} \
 	     dp_PREFIX="${PREFIX}" \
 	     dp_STAGEDIR="${STAGEDIR}" \
@@ -238,6 +239,7 @@ pj-install-files:
 	     dp_INSTALL_man="${INSTALL_MAN}" \
 	     dp_RLN="${RLN}" \
 	     dp_TMPPLIST="${TMPPLIST}" \
+	     dp_ECHO_MSG="${ECHO_MSG}" \
 	     ${SH} ${_PJ.BASEDIR}/foreach.sh \
 	         ${SH} ${_PJ.BASEDIR}/install-file.sh -- "${PJ.INSTALL}"
 .endif
